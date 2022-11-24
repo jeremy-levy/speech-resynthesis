@@ -9,6 +9,8 @@
 import glob
 import os
 import shutil
+import random
+import numpy as np
 
 import matplotlib
 import torch
@@ -27,6 +29,12 @@ def plot_spectrogram(spectrogram):
     plt.close()
 
     return fig
+
+
+def seed_everything(seed):
+    torch.manual_seed(0)
+    random.seed(0)
+    np.random.seed(0)
 
 
 def init_weights(m, mean=0.0, std=0.01):
@@ -78,3 +86,5 @@ class AttrDict(dict):
     def __init__(self, *args, **kwargs):
         super(AttrDict, self).__init__(*args, **kwargs)
         self.__dict__ = self
+
+        self.test_base_path = 'D:\\DS_10283_3443\\VCTK-Corpus-0.92\\wav48_silence_trimmed_padded\\'

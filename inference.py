@@ -16,7 +16,7 @@ import sys
 import time
 from multiprocessing import Manager, Pool
 from pathlib import Path
-
+import shutil
 import librosa
 import numpy as np
 import torch
@@ -103,7 +103,8 @@ def init_worker(queue, arguments):
     json_config = json.loads(data)
     h = AttrDict(json_config)
 
-    generator = CodeGenerator(h).to(idx)
+    # generator = CodeGenerator(h).to(idx)
+    generator = CodeGenerator(h)
     if os.path.isdir(a.checkpoint_file):
         cp_g = scan_checkpoint(a.checkpoint_file, 'g_')
     else:
@@ -142,7 +143,8 @@ def init_worker(queue, arguments):
             spkrs = [dataset.spkr_to_id[s] for s in a.target_speakers]
         else:
             spkrs = random.sample(range(len(dataset.id_to_spkr)), k=min(5, len(dataset.id_to_spkr)))
-    
+    print('spkrs', spkrs)
+
     if a.f0_stats and h.get('f0', None) is not None:
         f0_stats = torch.load(a.f0_stats)
 
@@ -160,7 +162,11 @@ def init_worker(queue, arguments):
 def inference(item_index):
     global spk_id_dict
     code, gt_audio, filename, _ = dataset[item_index]
-    code = {k: torch.from_numpy(v).to(device).unsqueeze(0) for k, v in code.items()}
+    print('filename', filename)
+    shutil.copy(filename, a.output_dir)
+
+    # code = {k: torch.from_numpy(v).to(device).unsqueeze(0) for k, v in code.items()}
+    code = {k: torch.from_numpy(v).unsqueeze(0) for k, v in code.items()}
 
     if a.parts:
         parts = Path(filename).parts
@@ -198,6 +204,8 @@ def inference(item_index):
 
         for spkr_i, k in enumerate(local_spkrs):
             code['spkr'].fill_(k)
+
+            print('in iterations', spkr_i, k)
 
             if a.f0_stats and h.get('f0', None) is not None and not h.get('f0_normalize', False):
                 spkr = k
@@ -244,18 +252,22 @@ def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument('--code_file', default=None)
-    parser.add_argument('--input_code_file', default='/cs/labs/adiyoss/gallilmaimon/DISC/data/VCTK-corpus/pred_hubert/p277_val.txt')
-    parser.add_argument('--output_dir', default='generations')
-    parser.add_argument('--checkpoint_file', default='checkpoints/vctk_hubert/')
+    parser.add_argument('--input_code_file', default='D:\\DS_10283_3443\\VCTK-Corpus-0.92\\input_code_hubert.txt')
+    parser.add_argument('--output_dir', default='D:\\DS_10283_3443\\VCTK-Corpus-0.92\\output')
+    parser.add_argument('--checkpoint_file', default='D:\\vctk_hubert\\vctk_hubert')
     parser.add_argument('--f0-stats', type=Path)
-    parser.add_argument('--vc', action='store_true')
-    parser.add_argument('--target-speakers', default=None, nargs='+', help='target speakers, if None, 5 random speakers are chosen')
+    parser.add_argument('--vc', default=True, action='store_true')
+    parser.add_argument('--target-speakers', default=None, nargs='+',
+                        help='target speakers, if None, 5 random speakers are chosen')
     parser.add_argument('--pad', default=None, type=int)
     parser.add_argument('--debug', action='store_true')
-    parser.add_argument('--eval_mode', action='store_false', help='If true the samples are generated and not clipped to a given length, based on GT or codes')
+    parser.add_argument('--eval_mode', action='store_false',
+                        help='If true the samples are generated and not clipped to a given length, '
+                             'based on GT or codes')
     parser.add_argument('--parts', action='store_true')
     parser.add_argument('--unseen-f0', type=Path)
     parser.add_argument('-n', type=int, default=10)
+
     a = parser.parse_args()
 
     seed = 52
@@ -273,6 +285,8 @@ def main():
         config_file = os.path.join(a.checkpoint_file, 'config.json')
     else:
         config_file = os.path.join(os.path.split(a.checkpoint_file)[0], 'config.json')
+
+    print('config_file', config_file)
     with open(config_file) as f:
         data = f.read()
     json_config = json.loads(data)
@@ -295,12 +309,14 @@ def main():
         dataset = [(parse_code(x[1]), None, x[0], None) for x in dataset]
     else:
         file_list = parse_manifest(a.input_code_file, h.test_base_path)
-        with open(f'{os.path.dirname(h.input_training_file)}/id_to_spkr.pkl', 'rb') as f:
+        id_to_spkr_path = os.path.join(os.path.dirname(h.input_training_file), 'id_to_spkr.pkl')
+        print('id_to_spkr_path', id_to_spkr_path)
+        with open(id_to_spkr_path, 'rb') as f:
             id_to_spkr = pickle.load(f)
         
         dataset = CodeDataset(file_list, -1, h.code_hop_size, h.n_fft, h.num_mels, h.hop_size, h.win_size,
-                              h.sampling_rate, h.fmin, h.fmax, n_cache_reuse=0, fmax_loss=h.fmax_for_loss, device=device,
-                              f0=h.get('f0', None), multispkr=h.get('multispkr', None),
+                              h.sampling_rate, h.fmin, h.fmax, n_cache_reuse=0, fmax_loss=h.fmax_for_loss,
+                              device=device, f0=h.get('f0', None), multispkr=h.get('multispkr', None),
                               f0_stats=h.get('f0_stats', None), f0_normalize=h.get('f0_normalize', False),
                               f0_feats=h.get('f0_feats', False), f0_median=h.get('f0_median', False),
                               f0_interp=h.get('f0_interp', False), vqvae=h.get('code_vq_params', False),

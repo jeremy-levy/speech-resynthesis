@@ -294,7 +294,7 @@ def main():
 
     parser.add_argument('--group_name', default=None)
     parser.add_argument('--checkpoint_path', default='checkpoints/esd_hubert')
-    parser.add_argument('--config', default='configs/ESD/hubert100_lut.json')
+    parser.add_argument('--config', default='configs/VCTK/hubert100_lut.json')
     parser.add_argument('--training_epochs', default=2000, type=int)
     parser.add_argument('--training_steps', default=400000, type=int)
     parser.add_argument('--stdout_interval', default=5, type=int)
