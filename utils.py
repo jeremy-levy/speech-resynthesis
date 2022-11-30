@@ -32,9 +32,9 @@ def plot_spectrogram(spectrogram):
 
 
 def seed_everything(seed):
-    torch.manual_seed(0)
-    random.seed(0)
-    np.random.seed(0)
+    torch.manual_seed(seed)
+    random.seed(seed)
+    np.random.seed(seed)
 
 
 def init_weights(m, mean=0.0, std=0.01):
@@ -88,3 +88,5 @@ class AttrDict(dict):
         self.__dict__ = self
 
         self.test_base_path = 'D:\\DS_10283_3443\\VCTK-Corpus-0.92\\wav48_silence_trimmed_padded\\'
+        self.train_base_path = 'D:\\DS_10283_3443\\VCTK-Corpus-0.92\\wav48_silence_trimmed_padded\\'
+        self.val_base_path = 'D:\\DS_10283_3443\\VCTK-Corpus-0.92\\wav48_silence_trimmed_padded\\'

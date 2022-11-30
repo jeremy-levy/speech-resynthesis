@@ -41,7 +41,8 @@ def train(rank, local_rank, a, h):
         )
 
     torch.cuda.manual_seed(h.seed)
-    device = torch.device('cuda:{:d}'.format(local_rank))
+    # device = torch.device('cuda:{:d}'.format(local_rank))
+    device = torch.device('cpu')
 
     generator = CodeGenerator(h).to(device)
     mpd = MultiPeriodDiscriminator().to(device)
@@ -177,10 +178,13 @@ def train(rank, local_rank, a, h):
 
             y_df_hat_r, y_df_hat_g, fmap_f_r, fmap_f_g = mpd(y, y_g_hat)
             y_ds_hat_r, y_ds_hat_g, fmap_s_r, fmap_s_g = msd(y, y_g_hat)
+
             loss_fm_f = feature_loss(fmap_f_r, fmap_f_g)
             loss_fm_s = feature_loss(fmap_s_r, fmap_s_g)
+
             loss_gen_f, losses_gen_f = generator_loss(y_df_hat_g)
             loss_gen_s, losses_gen_s = generator_loss(y_ds_hat_g)
+            
             loss_gen_all = loss_gen_s + loss_gen_f + loss_fm_s + loss_fm_f + loss_mel
             if h.get('f0_vq_params', None):
                 loss_gen_all += f0_commit_loss * h.get('lambda_commit', None)
@@ -293,8 +297,8 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--group_name', default=None)
-    parser.add_argument('--checkpoint_path', default='checkpoints/esd_hubert')
-    parser.add_argument('--config', default='configs/VCTK/hubert100_lut.json')
+    parser.add_argument('--checkpoint_path', default='D:\\vctk_hubert\\vctk_hubert\\checkpoint_realtime\\esd_hubert')
+    parser.add_argument('--config', default='D:\\vctk_hubert\\vctk_hubert\\config.json')
     parser.add_argument('--training_epochs', default=2000, type=int)
     parser.add_argument('--training_steps', default=400000, type=int)
     parser.add_argument('--stdout_interval', default=5, type=int)

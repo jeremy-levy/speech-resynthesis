@@ -63,11 +63,39 @@ def scan_checkpoint(cp_dir, prefix):
     return sorted(cp_list)[-1]
 
 
-def generate(h, generator, code):
+def split_code(code, i, window_size):
+    hubert_token = code['code']
+    f0 = code['f0']
+
+    hubert_token_splitted = hubert_token[:, i:i+window_size]
+    f0_splitted = f0[:, :, i:i+window_size]
+
+    return {'code': hubert_token_splitted, 'spkr': code['spkr'], 'f0': f0_splitted}
+
+
+def generate(h, generator, code, window_size=2, overlap=False):
     start = time.time()
-    y_g_hat = generator(**code)
-    if type(y_g_hat) is tuple:
-        y_g_hat = y_g_hat[0]
+
+    idx_window = 0
+    y_g_hat_list = []
+    while idx_window < code['code'].shape[1]:
+        code_splitted = split_code(code, idx_window, window_size=window_size)
+        y_g_hat = generator(**code_splitted)
+
+        if overlap is True:
+            y_g_hat_list.append(y_g_hat[:, :, 0:int(y_g_hat.shape[2]/2)])
+            idx_window += int(window_size/2)
+        else:
+            y_g_hat_list.append(y_g_hat)
+            idx_window += window_size
+
+    y_g_hat = torch.cat(y_g_hat_list, dim=2)
+
+    # y_g_hat = generator(**code)
+
+    # if type(y_g_hat) is tuple:
+    #     y_g_hat = y_g_hat[0]
+
     rtf = (time.time() - start) / (y_g_hat.shape[-1] / h.sampling_rate)
     audio = y_g_hat.squeeze()
     audio = audio * MAX_WAV_VALUE
@@ -159,7 +187,7 @@ def init_worker(queue, arguments):
 
 
 @torch.no_grad()
-def inference(item_index):
+def inference(item_index, window_size, overlap):
     global spk_id_dict
     code, gt_audio, filename, _ = dataset[item_index]
     print('filename', filename)
@@ -191,7 +219,7 @@ def inference(item_index):
         del new_code['f0']
         new_code['f0'] = code['f0']
 
-    audio, rtf = generate(h, generator, new_code)
+    audio, rtf = generate(h, generator, new_code, window_size=window_size, overlap=overlap)
     output_file = os.path.join(a.output_dir, fname_out_name + '_gen.wav')
     audio = librosa.util.normalize(audio.astype(np.float32))
     write(output_file, h.sampling_rate, audio)
@@ -234,9 +262,10 @@ def inference(item_index):
                     std = f0_stats_[k]['f0_std']
                 code['f0_stats'] = torch.FloatTensor([mean, std]).view(1, -1).to(device)
 
-            audio, rtf = generate(h, generator, code)
+            audio, rtf = generate(h, generator, code, window_size=window_size, overlap=overlap)
 
-            output_file = os.path.join(a.output_dir, fname_out_name + f'_{k}_gen.wav')
+            output_file = os.path.join(a.output_dir,
+                                       fname_out_name + f'_{k}_gen_{window_size}_ws_{overlap}_overlap.wav')
             audio = librosa.util.normalize(audio.astype(np.float32))
             write(output_file, h.sampling_rate, audio)
 
@@ -246,7 +275,7 @@ def inference(item_index):
         write(output_file, h.sampling_rate, gt_audio)
 
 
-def main():
+def main(window_size, overlap):
     global spk_id_dict
     print('Initializing Inference Process..')
 
@@ -260,7 +289,7 @@ def main():
     parser.add_argument('--target-speakers', default=None, nargs='+',
                         help='target speakers, if None, 5 random speakers are chosen')
     parser.add_argument('--pad', default=None, type=int)
-    parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--debug', default=True, action='store_true')
     parser.add_argument('--eval_mode', action='store_false',
                         help='If true the samples are generated and not clipped to a given length, '
                              'based on GT or codes')
@@ -330,12 +359,13 @@ def main():
         init_worker(idQueue, a)
 
         for i in range(0, len(dataset)):
-            inference(i)
+            inference(i, window_size=window_size, overlap=overlap)
             bar = progbar(i, len(dataset))
             message = f'{bar} {i}/{len(dataset)} '
             stream(message)
             if a.n != -1 and i > a.n:
                 break
+
     else:
         idx = list(range(len(dataset)))
         random.shuffle(idx)
@@ -349,4 +379,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    for i in [2, 4, 6, 8, 10, 16, 32, 64]:
+        main(window_size=i, overlap=False)
+        # main(window_size=i, overlap=True)
+    # main(window_size=256, overlap=False)
